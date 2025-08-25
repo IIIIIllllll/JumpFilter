@@ -1,6 +1,4 @@
 // ===== 配置部分 =====
-
-// 白名单和黑名单（可自行添加/修改）
 const whitelist = [
   "ankii.fanbox.cc",
   "fanbox",
@@ -16,50 +14,25 @@ const blacklist = [
 // 模式： "whitelist" = 只允许白名单通过； "blacklist" = 禁止黑名单
 const mode = "whitelist"; 
 
-// ===== 主逻辑 =====
-window.onload = function () {
-  const params = new URLSearchParams(window.location.search);
-  const key = params.get("key");
-  const file = params.get("file");
+// ===== 工具函数 =====
+function setMessage(text) {
+  const el = document.getElementById("message");
+  if (el) el.textContent = text;
+}
 
-  const messageEl = document.getElementById("message");
-
-  // 1. 检查来源站点
-  const referrer = document.referrer || "";
-  if (!checkReferrer(referrer)) {
-    messageEl.innerText = "来源不允许，无法跳转。\nReferrer not allowed, redirect blocked.";
-    return;
+function getQueryParams() {
+  const params = {};
+  const queryString = window.location.search.substring(1);
+  const pairs = queryString.split("&");
+  for (const pair of pairs) {
+    const [key, value] = pair.split("=");
+    if (key && value) params[decodeURIComponent(key)] = decodeURIComponent(value);
   }
+  return params;
+}
 
-  // 2. 参数检查
-  if (!key || !file) {
-    messageEl.innerText = "缺少参数！请检查链接。\nMissing parameters! Please check the link.";
-    return;
-  }
-
-  // 3. 解密
-  try {
-    const bytes = CryptoJS.AES.decrypt(file, key);
-    const decryptedUrl = bytes.toString(CryptoJS.enc.Utf8);
-
-    if (!decryptedUrl) {
-      messageEl.innerText = "密钥错误或解密失败。\nWrong key or decryption failed.";
-      return;
-    }
-
-    // 跳转
-    messageEl.innerText = "验证成功，正在跳转...\nVerification passed, redirecting...";
-    setTimeout(() => {
-      window.location.href = decryptedUrl;
-    }, 1200);
-  } catch (e) {
-    messageEl.innerText = "解密出错。\nDecryption error.";
-  }
-};
-
-// ===== 检查来源函数 =====
 function checkReferrer(ref) {
-  if (!ref) return true; // 没有来源则允许（可改成 false）
+  if (!ref) return true; // 没有来源也允许，可改 false
 
   if (mode === "whitelist") {
     return whitelist.some(domain => ref.includes(domain));
@@ -67,4 +40,64 @@ function checkReferrer(ref) {
     return !blacklist.some(domain => ref.includes(domain));
   }
   return true;
+}
+
+// ===== 主逻辑 =====
+async function main() {
+  const params = getQueryParams();
+  const key = params["key"];
+  const file = params["file"];
+  const referrer = document.referrer || "";
+
+  // 1. 检查来源
+  if (!checkReferrer(referrer)) {
+    setMessage("来源不允许，无法跳转。\nReferrer not allowed, redirect blocked.");
+    return;
+  }
+
+  // 2. 参数检查
+  if (!key || !file) {
+    setMessage("缺少必要参数 ?key=xxx&file=yyy / Missing required parameters ?key=xxx&file=yyy");
+    return;
+  }
+
+  try {
+    // 3. 获取密文
+    const res = await fetch("data.json?ts=" + Date.now());
+    if (!res.ok) {
+      setMessage("无法读取数据文件 / Failed to fetch data.json");
+      return;
+    }
+    const db = await res.json();
+    const ciphertext = db[file];
+    if (!ciphertext) {
+      setMessage("未找到对应文件 / File not found");
+      return;
+    }
+
+    // 4. 解密
+    const bytes = CryptoJS.AES.decrypt(ciphertext, key);
+    const decryptedUrl = bytes.toString(CryptoJS.enc.Utf8);
+
+    if (!decryptedUrl) {
+      setMessage("密钥错误或解密失败 / Wrong key or decryption failed");
+      return;
+    }
+
+    // 5. 成功跳转
+    setMessage("验证成功，正在跳转...\nVerification passed, redirecting...");
+    setTimeout(() => {
+      window.location.href = decryptedUrl;
+    }, 800);
+  } catch (e) {
+    console.error(e);
+    setMessage("读取或解密失败 / Failed to read or decrypt");
+  }
+}
+
+// 页面加载后执行
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", main);
+} else {
+  main();
 }
