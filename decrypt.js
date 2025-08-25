@@ -32,7 +32,7 @@ function getQueryParams() {
 }
 
 function checkReferrer(ref) {
-  if (!ref) return true; // 没有来源也允许，可改 false
+  if (!ref) return false; // 没有来源也允许，可改 false
 
   if (mode === "whitelist") {
     return whitelist.some(domain => ref.includes(domain));
@@ -101,3 +101,4 @@ if (document.readyState === "loading") {
 } else {
   main();
 }
+
